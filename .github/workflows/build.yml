@@ -19,7 +19,7 @@ jobs:
       run:
         shell: msys2 {0}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: msys2/setup-msys2@v2
         with:
@@ -75,14 +75,14 @@ jobs:
           Compress-Archive -Path dist\* -DestinationPath "build\installer\Streamline-${{ steps.version.outputs.version }}-win64.zip"
           Get-ChildItem build\installer
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: streamline-${{ steps.version.outputs.version }}-win64
           path: build/installer/*
 
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: build/installer/*
           generate_release_notes: true
