@@ -102,8 +102,16 @@ bool HostPipeline::start(const Config& config, HWND preview, std::string& error)
   }
   preview_branch += "! d3d11videosink name=vsink sync=false ";
 
-  // Audio: window -> only that process tree; monitor -> whole system except ourselves,
-  // so a local viewer/preview never feeds back into the capture.
+  // Audio: window -> only that process tree; monitor -> whole system minus one process tree.
+  // The loopback API excludes a single tree, so with Discord open we drop Discord (call
+  // partners would hear themselves) instead of ourselves; the host preview's audio ends in
+  // a fakesink, so only a viewer on this same PC would then echo back.
+  DWORD audio_pid = config.target.pid;
+  DWORD discord_pid = 0;
+  if (!is_window) {
+    if (config.target.exclude_discord) discord_pid = find_discord_pid();
+    audio_pid = discord_pid ? discord_pid : GetCurrentProcessId();
+  }
   std::string audio = std::format(
       "wasapi2src loopback=true low-latency=true loopback-mode={} loopback-target-pid={} "
       "! audioconvert ! audioresample ! audio/x-raw,rate=48000,channels=2 "
@@ -111,9 +119,14 @@ bool HostPipeline::start(const Config& config, HWND preview, std::string& error)
       "audio_tee. ! queue ! rtpopuspay ! rtpopusdepay ! opusdec "
       "! level name=alevel interval=200000000 ! fakesink sync=false ",
       is_window ? "include-process-tree" : "exclude-process-tree",
-      is_window ? config.target.pid : GetCurrentProcessId(), config.audio_kbps * 1000);
-  description_ += is_window ? std::format(" · janela (WGC) + Opus (PID {})", config.target.pid)
-                            : std::string(" · tela + Opus (sistema)");
+      audio_pid, config.audio_kbps * 1000);
+  if (is_window) {
+    description_ += std::format(" · janela (WGC) + Opus (PID {})", config.target.pid);
+  } else if (discord_pid) {
+    description_ += std::format(" · tela + Opus (sistema sem Discord, PID {})", discord_pid);
+  } else {
+    description_ += " · tela + Opus (sistema)";
+  }
 
   GError* parse_error = nullptr;
   std::string launch = video + preview_branch + audio;

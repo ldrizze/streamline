@@ -70,6 +70,9 @@ std::string sources_report() {
                       : std::to_string(w.width) + "x" + std::to_string(w.height)) +
          " \"" + to_utf8(w.title) + "\"\n";
   }
+  DWORD discord = streamline::find_discord_pid();
+  r += discord ? "discord: pid=" + std::to_string(discord) + " (excluded from screen audio)\n"
+               : std::string("discord: not running\n");
   return r;
 }
 

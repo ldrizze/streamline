@@ -34,6 +34,9 @@ SourcePickerDialog::SourcePickerDialog(wxWindow* parent)
   list_->AppendColumn("Tamanho", wxLIST_FORMAT_LEFT, FromDIP(100));
 
   hint_ = new wxStaticText(this, wxID_ANY, "");
+  exclude_discord_ = new wxCheckBox(this, wxID_ANY,
+                                    wxString::FromUTF8("Não transmitir o áudio do Discord"));
+  exclude_discord_->SetValue(true);
 
   auto* buttons = CreateStdDialogButtonSizer(wxOK | wxCANCEL);
   ok_ = static_cast<wxButton*>(FindWindow(wxID_OK));
@@ -42,7 +45,8 @@ SourcePickerDialog::SourcePickerDialog(wxWindow* parent)
 
   sizer->Add(top, 0, wxEXPAND | wxALL, FromDIP(12));
   sizer->Add(list_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(12));
-  sizer->Add(hint_, 0, wxEXPAND | wxALL, FromDIP(12));
+  sizer->Add(hint_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+  sizer->Add(exclude_discord_, 0, wxEXPAND | wxALL, FromDIP(12));
   sizer->Add(buttons, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
   SetSizer(sizer);
   SetSize(FromDIP(wxSize(760, 520)));
@@ -53,6 +57,7 @@ SourcePickerDialog::SourcePickerDialog(wxWindow* parent)
   list_->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent&) { OnSelectionChanged(); });
   list_->Bind(wxEVT_LIST_ITEM_DESELECTED, [this](wxListEvent&) { OnSelectionChanged(); });
   list_->Bind(wxEVT_LIST_ITEM_ACTIVATED, &SourcePickerDialog::OnItemActivated, this);
+  exclude_discord_->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) { OnSelectionChanged(); });
   ok_->Bind(wxEVT_BUTTON, [this](wxCommandEvent& e) {
     if (Accept()) e.Skip();
   });
@@ -109,10 +114,14 @@ void SourcePickerDialog::Populate() {
 void SourcePickerDialog::OnSelectionChanged() {
   long i = list_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
   ok_->Enable(i >= 0);
+  bool monitor = i >= 0 && rows_[i].kind == CaptureTarget::Kind::Monitor;
+  exclude_discord_->Enable(monitor);  // a window's audio never includes Discord anyway
   if (i < 0) {
     hint_->SetLabel("");
-  } else if (rows_[i].kind == CaptureTarget::Kind::Monitor) {
-    hint_->SetLabel(wxString::FromUTF8("Áudio: todo o som do sistema."));
+  } else if (monitor) {
+    hint_->SetLabel(wxString::FromUTF8(exclude_discord_->GetValue()
+                                           ? "Áudio: todo o som do sistema, exceto o Discord."
+                                           : "Áudio: todo o som do sistema."));
   } else {
     hint_->SetLabel(wxString::FromUTF8("Áudio: somente deste aplicativo (PID ") +
                     wxString::Format("%lu", rows_[i].pid) + ").");
@@ -143,5 +152,6 @@ bool SourcePickerDialog::Accept() {
     }
   }
   selection_ = t;
+  selection_->exclude_discord = exclude_discord_->GetValue();
   return true;
 }

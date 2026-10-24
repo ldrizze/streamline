@@ -1,8 +1,10 @@
 #include "capture/sources.h"
 
 #include <dwmapi.h>
+#include <tlhelp32.h>
 
 #include <algorithm>
+#include <cwctype>
 #include <filesystem>
 #include <map>
 
@@ -157,6 +159,26 @@ std::vector<MonitorSource> list_monitors() {
   std::stable_partition(monitors.begin(), monitors.end(),
                         [](const MonitorSource& m) { return m.primary; });
   return monitors;
+}
+
+DWORD find_discord_pid() {
+  HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snap == INVALID_HANDLE_VALUE) return 0;
+  std::map<DWORD, DWORD> discord;  // pid -> parent pid
+  PROCESSENTRY32W e{sizeof e};
+  for (BOOL ok = Process32FirstW(snap, &e); ok; ok = Process32NextW(snap, &e)) {
+    std::wstring exe = e.szExeFile;
+    std::transform(exe.begin(), exe.end(), exe.begin(), ::towlower);
+    if (exe == L"discord.exe" || exe == L"discordptb.exe" || exe == L"discordcanary.exe") {
+      discord[e.th32ProcessID] = e.th32ParentProcessID;
+    }
+  }
+  CloseHandle(snap);
+  // The root is the Discord process whose parent isn't Discord (Update.exe, explorer...).
+  for (auto [pid, parent] : discord) {
+    if (!discord.contains(parent)) return pid;
+  }
+  return 0;
 }
 
 std::string to_utf8(const std::wstring& s) {

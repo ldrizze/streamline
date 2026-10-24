@@ -30,6 +30,7 @@ class SourcePickerDialog : public wxDialog {
   wxSearchCtrl* filter_ = nullptr;
   wxButton* ok_ = nullptr;
   wxStaticText* hint_ = nullptr;
+  wxCheckBox* exclude_discord_ = nullptr;
 
   std::vector<streamline::MonitorSource> monitors_;
   std::vector<streamline::WindowSource> windows_;

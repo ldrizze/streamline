@@ -7,6 +7,14 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ## [Não lançado]
 
+### Adicionado
+- Ao transmitir a tela toda, o áudio do Discord (estável, PTB ou Canary) fica de fora
+  da transmissão, para quem está na call não ouvir a própria voz de volta. Opção
+  **Não transmitir o áudio do Discord** no seletor, ligada por padrão.
+  `--list-sources` mostra o PID do Discord detectado. Com o Discord aberto, o próprio
+  Streamline deixa de ser excluído da captura (o Windows só exclui uma árvore de
+  processos por vez): um espectador rodando no mesmo PC do transmissor causaria eco.
+
 ## [0.2.0] - 2026-10-24
 
 Sinalização sem servidor próprio. **Incompatível com a 0.1.0**: transmissor e

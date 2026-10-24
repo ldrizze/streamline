@@ -32,6 +32,7 @@ struct CaptureTarget {
   HWND hwnd = nullptr;
   DWORD pid = 0;  // window only: audio is captured from this process tree
   std::wstring label;
+  bool exclude_discord = true;  // monitor only: leave Discord's voice out of the system audio
 };
 
 // Capturable top-level windows in Z-order, excluding our own process.
@@ -39,6 +40,10 @@ std::vector<WindowSource> list_windows();
 
 // Monitors with the primary one first.
 std::vector<MonitorSource> list_monitors();
+
+// Root process of a running Discord client (stable, PTB or Canary), or 0. Its children
+// (voice/audio utility processes) belong to its process tree.
+DWORD find_discord_pid();
 
 std::string to_utf8(const std::wstring& s);
 
