@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.25)
-project(streamline VERSION 0.2.0 LANGUAGES CXX RC)
+project(streamline VERSION 0.3.0 LANGUAGES CXX RC)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

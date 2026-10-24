@@ -3,11 +3,11 @@
 ;   ISCC /DAppVersion=1.2.3 packaging\streamline.iss  ->  build\installer\Streamline-Setup-1.2.3.exe
 
 #ifndef AppVersion
-  #define AppVersion "0.2.0"
+  #define AppVersion "0.3.0"
 #endif
-; Numeric x.y.z for the file version resource (AppVersion may be "0.2.0-ci.12").
+; Numeric x.y.z for the file version resource (AppVersion may be "0.3.0-ci.12").
 #ifndef NumericVersion
-  #define NumericVersion "0.2.0"
+  #define NumericVersion "0.3.0"
 #endif
 #define DistDir "..\dist"
 

@@ -7,6 +7,10 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ## [Não lançado]
 
+## [0.3.0] - 2026-10-24
+
+Compatível com a 0.2.0 (mesmo protocolo de sinalização).
+
 ### Adicionado
 - Ao transmitir a tela toda, o áudio do Discord (estável, PTB ou Canary) fica de fora
   da transmissão, para quem está na call não ouvir a própria voz de volta. Opção
@@ -14,6 +18,13 @@ sinalização e o comportamento podem mudar entre versões menores.
   `--list-sources` mostra o PID do Discord detectado. Com o Discord aberto, o próprio
   Streamline deixa de ser excluído da captura (o Windows só exclui uma árvore de
   processos por vez): um espectador rodando no mesmo PC do transmissor causaria eco.
+- README com visão geral, uso, arquitetura e instruções de compilação.
+
+### Limitações conhecidas
+- O Discord é detectado ao iniciar a transmissão; se for aberto ou reiniciado depois,
+  o áudio dele entra até a próxima transmissão.
+- As limitações da 0.2.0 continuam valendo (sem relay/TURN, brokers públicos sem
+  garantia, conexão entre redes diferentes não testada, bitrate do AV1 oscilando).
 
 ## [0.2.0] - 2026-10-24
 
@@ -85,6 +96,7 @@ Primeira versão de desenvolvimento.
 - Executáveis não assinados: o SmartScreen avisa na primeira execução.
 - Requer Windows 10 2004 (build 19041) ou mais novo, 64 bits.
 
-[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.2.0...HEAD
+[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/ldrizze/streamline/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ldrizze/streamline/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ldrizze/streamline/releases/tag/v0.1.0
