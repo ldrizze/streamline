@@ -51,6 +51,11 @@ add_executable(streamline WIN32
   src/app/main.cpp
   src/app/source_picker.cpp
   src/app/streamline.rc)
+# streamline.rc pulls the app icon from resources/icon.
+set_property(SOURCE src/app/streamline.rc APPEND PROPERTY INCLUDE_DIRECTORIES
+  ${CMAKE_CURRENT_SOURCE_DIR}/resources/icon)
+set_property(SOURCE src/app/streamline.rc APPEND PROPERTY OBJECT_DEPENDS
+  ${CMAKE_CURRENT_SOURCE_DIR}/resources/icon/streamline.ico)
 target_link_libraries(streamline PRIVATE streamline_host streamline_viewer wx::core wx::base)
 target_compile_definitions(streamline PRIVATE STREAMLINE_VERSION="${STREAMLINE_VERSION}")
 

@@ -1,3 +1,6 @@
 // wx.rc embeds the Common Controls v6 manifest (and DPI awareness) wxMSW requires.
 #define wxUSE_DPI_AWARE_MANIFEST 2
 #include "wx/msw/wx.rc"
+
+// Explorer shows the alphabetically first icon group, so this must sort before wxICON_AAA.
+appicon ICON "streamline.ico"

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <rect width="256" height="256" rx="56" fill="#0E1726"/>
+  <!-- signal waves radiating from the source -->
+  <g fill="none" stroke-width="22" stroke-linecap="round">
+    <path stroke="#5EEAD4" d="M64 140 A52 52 0 0 1 116 192"/>
+    <path stroke="#2EC4B6" d="M64 96 A96 96 0 0 1 160 192"/>
+    <path stroke="#1F9A92" d="M64 52 A140 140 0 0 1 204 192"/>
+  </g>
+  <!-- source -->
+  <circle cx="64" cy="192" r="22" fill="#FF8A1E"/>
+</svg>

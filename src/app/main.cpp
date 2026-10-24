@@ -147,6 +147,7 @@ class MainFrame : public wxFrame {
     sizer->Add(log_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
     panel->SetSizer(sizer);
     SetClientSize(FromDIP(wxSize(960, 760)));
+    SetIcons(wxIconBundle("appicon", nullptr));
 
     stream_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { PickSource(); });
     watch_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AskRoomAndWatch(); });
