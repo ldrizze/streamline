@@ -1,0 +1,88 @@
+# Windows x86_64 build: MSYS2 UCRT64 -> dist/ -> zip + Inno Setup installer.
+# Tags v* also publish a GitHub Release with both files.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # release on tags
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-pkgconf
+            mingw-w64-ucrt-x86_64-gstreamer
+            mingw-w64-ucrt-x86_64-gst-plugins-base
+            mingw-w64-ucrt-x86_64-gst-plugins-good
+            mingw-w64-ucrt-x86_64-gst-plugins-bad
+            mingw-w64-ucrt-x86_64-gst-plugins-rs
+            mingw-w64-ucrt-x86_64-libnice
+            mingw-w64-ucrt-x86_64-libsoup3
+            mingw-w64-ucrt-x86_64-json-glib
+            mingw-w64-ucrt-x86_64-wxwidgets3.3-msw
+
+      - name: Version
+        id: version
+        run: |
+          base=$(sed -n 's/^project(streamline VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then v="${GITHUB_REF_NAME#v}"; else v="$base-ci.$GITHUB_RUN_NUMBER"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "numeric=${v%%-*}" >> "$GITHUB_OUTPUT"
+          echo "Streamline $v"
+
+      - name: Build and package dist/
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DSTREAMLINE_VERSION="${{ steps.version.outputs.version }}"
+          cmake --build build
+          cmake --install build --prefix dist
+          bash tools/collect-licenses.sh dist
+
+      - name: Check package
+        run: |
+          # Only Windows on PATH: a DLL missing from dist/ must fail here, not load from MSYS2.
+          export PATH=/c/Windows/system32:/c/Windows
+          ./dist/bin/streamline.exe --check-package
+          # Runners have no AMD GPU / audio device: report, don't fail.
+          ./dist/bin/streamline.exe --check || echo "::warning::--check reported missing runtime elements (expected without GPU/audio)"
+
+      - name: Installer and zip
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress }
+          & $iscc /Q "/DAppVersion=${{ steps.version.outputs.version }}" "/DNumericVersion=${{ steps.version.outputs.numeric }}" packaging\streamline.iss
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          Compress-Archive -Path dist\* -DestinationPath "build\installer\Streamline-${{ steps.version.outputs.version }}-win64.zip"
+          Get-ChildItem build\installer
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: streamline-${{ steps.version.outputs.version }}-win64
+          path: build/installer/*
+
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build/installer/*
+          generate_release_notes: true

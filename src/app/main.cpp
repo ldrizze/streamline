@@ -40,13 +40,16 @@ void console_print(const std::string& text) {
 }
 
 std::string environment_report(bool bundled, bool& ok) {
-  std::string r = "streamline 0.1.0\n";
+  std::string r = "streamline " STREAMLINE_VERSION "\n";
   r += std::string(gst_version_string()) + (bundled ? " (bundled)\n" : " (system)\n");
   auto missing = streamline::missing_elements();
   ok = missing.empty();
   r += "elements: " + std::to_string(streamline::required_elements().size() - missing.size()) + "/" +
        std::to_string(streamline::required_elements().size()) + " OK\n";
   for (const auto& m : missing) r += "  MISSING: " + m + "\n";
+  for (const auto& m : streamline::missing_optional_elements()) {
+    r += "  optional (GPU) not available: " + m + " (software fallback)\n";
+  }
   return r;
 }
 
@@ -317,6 +320,15 @@ class App : public wxApp {
       if (arg == "--check") {
         console_print(report);
         std::exit(ok ? 0 : 1);  // wx would turn a false OnInit into -1
+      } else if (arg == "--check-package") {
+        // Hardware-independent (CI): every bundled plugin DLL must load.
+        int checked = 0;
+        auto failed = streamline::failed_plugins(checked);
+        std::string r = "plugins: " + std::to_string(checked - int(failed.size())) + "/" +
+                        std::to_string(checked) + " loaded\n";
+        for (const auto& f : failed) r += "  FAILED: " + f + "\n";
+        console_print(r);
+        std::exit(failed.empty() && checked > 0 ? 0 : 1);
       } else if (arg == "--list-sources") {
         console_print(sources_report());
         std::exit(0);

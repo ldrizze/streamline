@@ -51,8 +51,8 @@ const std::vector<std::string>& required_elements() {
       // capture
       "d3d11screencapturesrc", "d3d11convert", "d3d11upload", "d3d11download", "appsrc",
       "wasapi2src",
-      // encode / decode
-      "amfav1enc", "av1parse", "d3d11av1dec", "dav1ddec", "vp8enc", "vp8dec", "opusenc", "opusdec",
+      // encode / decode (hardware AV1 is optional, see optional_elements())
+      "av1parse", "dav1ddec", "vp8enc", "vp8dec", "opusenc", "opusdec",
       // RTP / WebRTC
       "rtpav1pay", "rtpav1depay", "rtpvp8pay", "rtpvp8depay", "rtpopuspay", "rtpopusdepay",
       "webrtcbin", "rtpbin", "nicesrc", "nicesink", "dtlssrtpenc", "dtlssrtpdec", "srtpenc",
@@ -63,9 +63,17 @@ const std::vector<std::string>& required_elements() {
   return elements;
 }
 
-std::vector<std::string> missing_elements() {
+const std::vector<std::string>& optional_elements() {
+  // Registered only when the GPU supports them; VP8 / dav1d are the fallbacks.
+  static const std::vector<std::string> elements = {"amfav1enc", "d3d11av1dec"};
+  return elements;
+}
+
+namespace {
+
+std::vector<std::string> missing_from(const std::vector<std::string>& names) {
   std::vector<std::string> missing;
-  for (const auto& name : required_elements()) {
+  for (const auto& name : names) {
     GstElementFactory* f = gst_element_factory_find(name.c_str());
     if (f) {
       gst_object_unref(f);
@@ -74,6 +82,33 @@ std::vector<std::string> missing_elements() {
     }
   }
   return missing;
+}
+
+}  // namespace
+
+std::vector<std::string> missing_elements() { return missing_from(required_elements()); }
+
+std::vector<std::string> missing_optional_elements() { return missing_from(optional_elements()); }
+
+std::vector<std::string> failed_plugins(int& checked) {
+  checked = 0;
+  fs::path dir = exe_dir().parent_path() / "lib" / "gstreamer-1.0";
+  if (!fs::is_directory(dir)) return {"not a packaged build (no lib/gstreamer-1.0)"};
+  std::vector<std::string> failed;
+  for (const auto& entry : fs::directory_iterator(dir)) {
+    if (entry.path().extension() != ".dll") continue;
+    ++checked;
+    GError* err = nullptr;
+    std::string path = entry.path().string();
+    GstPlugin* plugin = gst_plugin_load_file(path.c_str(), &err);
+    if (plugin) {
+      gst_object_unref(plugin);
+    } else {
+      failed.push_back(entry.path().filename().string() + ": " + (err ? err->message : "?"));
+      g_clear_error(&err);
+    }
+  }
+  return failed;
 }
 
 }  // namespace streamline

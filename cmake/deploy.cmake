@@ -21,6 +21,9 @@ get_filename_component(_mingw_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
 
 install(TARGETS streamline streamline-signal RUNTIME DESTINATION bin)
 install(FILES ${_plugin_files} DESTINATION lib/gstreamer-1.0)
+# Our license + full GPL/LGPL texts; tools/collect-licenses.sh adds the per-package notices.
+install(FILES LICENSE DESTINATION . RENAME LICENSE.txt)
+install(DIRECTORY packaging/licenses/ DESTINATION licenses)
 
 install(CODE "
   if(POLICY CMP0207)

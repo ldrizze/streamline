@@ -7,6 +7,9 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
+# CI overrides this from the git tag (v1.2.3 -> 1.2.3).
+set(STREAMLINE_VERSION "${PROJECT_VERSION}" CACHE STRING "Version shown by the app and installer")
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED IMPORTED_TARGET
   gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0 gstreamer-audio-1.0
@@ -49,6 +52,7 @@ add_executable(streamline WIN32
   src/app/source_picker.cpp
   src/app/streamline.rc)
 target_link_libraries(streamline PRIVATE streamline_host streamline_viewer wx::core wx::base)
+target_compile_definitions(streamline PRIVATE STREAMLINE_VERSION="${STREAMLINE_VERSION}")
 
 # Signaling server (WebSocket, rooms, SDP/ICE relay). Needs only libsoup + json-glib.
 add_executable(streamline-signal
