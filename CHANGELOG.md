@@ -7,6 +7,23 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ## [Não lançado]
 
+## [0.6.0] - 2026-10-24
+
+Compatível com a 0.2.0 em diante (mesmo protocolo de sinalização).
+
+### Adicionado
+- Modos de visualização, para quem assiste e para o preview de quem transmite (botão
+  direito no vídeo):
+  - **Somente o vídeo:** esconde convite, botões, status e log.
+  - **Tela cheia** (`F11` ou duplo clique no vídeo).
+  - **Picture-in-picture:** janela pequena (480x270) sem borda, sempre por cima das
+    outras, no canto inferior direito. Arraste pelo vídeo para mover e pelas bordas
+    para redimensionar.
+
+  `Esc` volta aos controles. Ao parar a transmissão, eles voltam sozinhos.
+- `--test-view=player|fullscreen|pip`: com `--test-host`/`--test-watch`, entra no modo
+  depois de 1 segundo.
+
 ## [0.5.0] - 2026-10-24
 
 Compatível com a 0.2.0 em diante (mesmo protocolo de sinalização). A recuperação de
@@ -143,7 +160,8 @@ Primeira versão de desenvolvimento.
 - Executáveis não assinados: o SmartScreen avisa na primeira execução.
 - Requer Windows 10 2004 (build 19041) ou mais novo, 64 bits.
 
-[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.5.0...HEAD
+[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/ldrizze/streamline/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/ldrizze/streamline/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ldrizze/streamline/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/ldrizze/streamline/compare/v0.3.0...v0.3.1

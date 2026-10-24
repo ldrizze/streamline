@@ -1,5 +1,6 @@
 // wx first: it pulls in winsock2.h, which must precede windows.h.
 #include <wx/clipbrd.h>
+#include <wx/display.h>
 #include <wx/wx.h>
 
 #include <windows.h>
@@ -126,6 +127,7 @@ struct Options {
   int test_seconds = 6;
   int resolution = 0;  // index into kResolutions
   int frame_rate = 0;  // index into kFrameRates
+  std::string test_view;  // view to enter once the test starts
 };
 
 class MainFrame : public wxFrame {
@@ -183,10 +185,12 @@ class MainFrame : public wxFrame {
     sizer->Add(invite_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
     sizer->Add(quality_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
     sizer->Add(buttons, 0, wxEXPAND | wxALL, FromDIP(12));
-    sizer->Add(preview_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(12));
+    preview_item_ = sizer->Add(preview_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(12));
     sizer->Add(status_, 0, wxEXPAND | wxALL, FromDIP(12));
     sizer->Add(log_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
     panel->SetSizer(sizer);
+    panel_ = panel;
+    sizer_ = sizer;
     SetClientSize(FromDIP(wxSize(960, 760)));
     SetIcons(wxIconBundle("appicon", nullptr));
 
@@ -196,6 +200,37 @@ class MainFrame : public wxFrame {
     stop_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Stop(); });
     copy_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CopyInvite(); });
     Bind(wxEVT_TIMER, [this](wxTimerEvent&) { OnTick(); });
+
+    // Video views. Clicks reach preview_ because the sink's child window is disabled
+    // (see PassClicksThrough); keys work wherever focus is in the frame.
+    preview_->SetToolTip(wxString::FromUTF8(
+        "Duplo clique: tela cheia  ·  Botão direito: modos de visualização"));
+    preview_->Bind(wxEVT_LEFT_DCLICK, [this](wxMouseEvent&) {
+      SetView(view_ == View::Fullscreen ? View::Normal : View::Fullscreen);
+    });
+    preview_->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& e) {
+      if (view_ != View::Pip) return e.Skip();
+      // Borderless PiP window: dragging the video moves it.
+      ReleaseCapture();
+      SendMessage(GetHWND(), WM_NCLBUTTONDOWN, HTCAPTION, 0);
+    });
+    preview_->Bind(wxEVT_RIGHT_UP, [this](wxMouseEvent&) { ShowViewMenu(); });
+    Bind(wxEVT_ACTIVATE, [this](wxActivateEvent& e) {
+      if (e.GetActive() && view_ == View::Pip) ApplyTopmost();
+      e.Skip();
+    });
+    Bind(wxEVT_CHAR_HOOK, [this](wxKeyEvent& e) {
+      switch (e.GetKeyCode()) {
+        case WXK_F11:
+          SetView(view_ == View::Fullscreen ? View::Normal : View::Fullscreen);
+          return;
+        case WXK_ESCAPE:
+          if (view_ != View::Normal) return SetView(View::Normal);
+          break;
+      }
+      e.Skip();
+    });
+
     Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& e) {
       StopAll();
       e.Skip();
@@ -264,8 +299,102 @@ class MainFrame : public wxFrame {
   }
   void FailTest() { Finish(false); }
 
+  enum class View { Normal, Player, Fullscreen, Pip };
+
+  // Normal: every control. Player: only the video, in the same window. Fullscreen: player
+  // on the whole monitor. Pip: player in a small borderless always-on-top window.
+  void SetView(View view) {
+    if (view == view_ || (mode_ == Mode::Idle && view != View::Normal)) return;
+    View view_before = view_;
+    // Back to a normal window first, then apply the new view.
+    if (view_ == View::Fullscreen) ShowFullScreen(false);
+    if (view_ == View::Pip) {
+      SetWindowStyleFlag(wxDEFAULT_FRAME_STYLE);
+      SetSize(normal_rect_);
+      if (was_maximized_) Maximize(true);
+    }
+    view_ = view;
+
+    bool controls = view == View::Normal;
+    for (size_t i = 0; i < sizer_->GetItemCount(); ++i) {
+      if (sizer_->GetItem(i) != preview_item_) sizer_->Show(i, controls);
+    }
+    preview_item_->SetBorder(controls ? FromDIP(12) : 0);
+    panel_->SetBackgroundColour(controls ? wxNullColour : *wxBLACK);
+    panel_->Layout();
+    panel_->Refresh();
+
+    if (view == View::Fullscreen) ShowFullScreen(true, wxFULLSCREEN_ALL);
+    if (view == View::Pip) {
+      was_maximized_ = IsMaximized();
+      if (was_maximized_) Maximize(false);
+      normal_rect_ = GetRect();
+      SetWindowStyleFlag(wxSTAY_ON_TOP | wxRESIZE_BORDER);
+      // 16:9 in the bottom-right corner of the monitor the window is on.
+      wxRect area = wxDisplay(this).GetClientArea();
+      wxSize size = FromDIP(wxSize(480, 270));
+      int margin = FromDIP(16);
+      SetSize(area.GetRight() - size.x - margin, area.GetBottom() - size.y - margin, size.x,
+              size.y);
+    }
+    // Switching between captioned and popup styles leaves the window hidden on MSW, and
+    // wxSTAY_ON_TOP set after creation doesn't reach WS_EX_TOPMOST.
+    if (view == View::Pip || view_before == View::Pip) ApplyTopmost();
+  }
+
+  // Test hook: enter a view by name (player, fullscreen, pip) one second into the test.
+  bool SetTestView(const std::string& name) {
+    static const std::pair<const char*, View> names[] = {
+        {"player", View::Player}, {"fullscreen", View::Fullscreen}, {"pip", View::Pip}};
+    for (const auto& [n, v] : names) {
+      if (name == n) {
+        test_view_ = v;
+        return true;
+      }
+    }
+    return false;
+  }
+
  private:
   enum class Mode { Idle, Hosting, Watching };
+
+  // Windows may ignore HWND_TOPMOST while the app isn't in the foreground; it is applied
+  // again on every activation.
+  void ApplyTopmost() {
+    SetWindowPos(GetHWND(), view_ == View::Pip ? HWND_TOPMOST : HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_FRAMECHANGED | SWP_SHOWWINDOW);
+  }
+
+  void ShowViewMenu() {
+    wxMenu menu;
+    struct Item {
+      View view;
+      const char* label;
+    };
+    const Item items[] = {{View::Normal, "Mostrar controles\tEsc"},
+                          {View::Player, "Somente o vídeo"},
+                          {View::Fullscreen, "Tela cheia\tF11"},
+                          {View::Pip, "Picture-in-picture"}};
+    for (int i = 0; i < int(std::size(items)); ++i) {
+      menu.AppendRadioItem(i + 1, wxString::FromUTF8(items[i].label))
+          ->Check(items[i].view == view_);
+    }
+    int chosen = GetPopupMenuSelectionFromUser(menu);
+    if (chosen != wxID_NONE) SetView(items[chosen - 1].view);
+  }
+
+  // d3d11videosink renders into a child window of preview_ that it creates (and may
+  // recreate) on its own thread, and that child swallows the mouse. A disabled child
+  // window's mouse input goes to its parent, so disable whatever it created.
+  void PassClicksThrough() {
+    EnumChildWindows(
+        preview_->GetHWND(),
+        [](HWND child, LPARAM) -> BOOL {
+          if (IsWindowEnabled(child)) EnableWindow(child, FALSE);
+          return TRUE;
+        },
+        0);
+  }
 
   void PickSource() {
     SourcePickerDialog dlg(this);
@@ -311,6 +440,7 @@ class MainFrame : public wxFrame {
     switch_->Enable(mode == Mode::Hosting);
     stop_->Enable(!idle);
     if (idle) {
+      SetView(View::Normal);  // the controls are needed to start again
       timer_.Stop();
       status_->SetLabel(wxString::FromUTF8("Parado"));
       room_->Clear();
@@ -340,6 +470,7 @@ class MainFrame : public wxFrame {
       Stop();
       return;
     }
+    PassClicksThrough();
     if (++ticks_ % 4 != 0) return;  // stats once per second
 
     std::string line;
@@ -358,6 +489,7 @@ class MainFrame : public wxFrame {
     status_->SetLabel(wxString::FromUTF8(line));
     if (test_seconds_) {
       test_log_ += line + "\n";
+      if (test_view_ && ticks_ == 4) SetView(*std::exchange(test_view_, std::nullopt));
       // Watching: success means frames arrived over WebRTC at some point.
       if (fps > 0) frames_seen_ = true;
       if (test_switch_ && ticks_ / 4 == test_seconds_ / 2) {
@@ -391,6 +523,12 @@ class MainFrame : public wxFrame {
   wxButton* watch_ = nullptr;
   wxButton* stop_ = nullptr;
   wxPanel* preview_ = nullptr;
+  wxPanel* panel_ = nullptr;
+  wxBoxSizer* sizer_ = nullptr;
+  wxSizerItem* preview_item_ = nullptr;
+  View view_ = View::Normal;
+  wxRect normal_rect_;  // window before PiP
+  bool was_maximized_ = false;
   wxStaticText* status_ = nullptr;
   wxTextCtrl* log_ = nullptr;
   int ticks_ = 0;
@@ -398,6 +536,7 @@ class MainFrame : public wxFrame {
   int test_seconds_ = 0;
   bool frames_seen_ = false;
   std::optional<CaptureTarget> test_switch_;
+  std::optional<View> test_view_;
   std::string test_log_;
 };
 
@@ -448,6 +587,8 @@ class App : public wxApp {
         for (int f = 0; f < int(std::size(kFrameRates)); ++f) {
           if (std::atoi(v->c_str()) == kFrameRates[f]) opt.frame_rate = f;
         }
+      } else if (auto v = value("--test-view=")) {
+        opt.test_view = *v;
       } else if (auto v = value("--test-watch=")) {
         opt.test_watch = *v;
       } else if (auto v = value("--test-switch=")) {
@@ -467,6 +608,10 @@ class App : public wxApp {
 
     auto* frame = new MainFrame(report, opt.brokers);
     frame->SetQuality(opt.resolution, opt.frame_rate);
+    if (!opt.test_view.empty() && !frame->SetTestView(opt.test_view)) {
+      console_print("unknown view\n");
+      std::exit(2);
+    }
     frame->Show();
     if (opt.test_host) {
       frame->SetTest(opt.test_seconds);

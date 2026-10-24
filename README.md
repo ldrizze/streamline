@@ -45,6 +45,11 @@
    continuam conectados.
 3. **Quem assiste:** clique em **Assistir** e cole o código.
 
+Para aproveitar a área do vídeo, clique com o botão direito nele e escolha **Somente o
+vídeo**, **Tela cheia** (também `F11` ou duplo clique) ou **Picture-in-picture** (uma
+janela pequena, sempre por cima das outras, que se move arrastando o vídeo). `Esc` volta
+aos controles.
+
 A barra de status mostra fps, kbps, nível de áudio e quantos espectadores estão
 conectados. Transmissor e espectadores precisam usar a mesma versão (enquanto 0.x).
 
@@ -134,6 +139,7 @@ com instalador e zip em tags `v*`.
 | `--room=<convite>` | Convite fixo para `--test-host` |
 | `--size=1920x1080\|1366x768\|1280x720` | Resolução de transmissão pré-selecionada |
 | `--fps=60\|30` | Taxa de quadros pré-selecionada |
+| `--test-view=player\|fullscreen\|pip` | Em teste, entra nesse modo de visualização após 1 s |
 | `--test-seconds=N` | Duração dos testes (padrão 6) |
 
 ### Estrutura
