@@ -102,6 +102,21 @@ std::vector<std::string> split_commas(const std::string& s) {
   return out;
 }
 
+// Transmission presets. The canvas is the largest monitor scaled to fit the chosen size.
+struct Resolution {
+  int width, height;
+};
+constexpr Resolution kResolutions[] = {{1920, 1080}, {1366, 768}, {1280, 720}};
+constexpr int kFrameRates[] = {60, 30};
+
+// 8 Mbps at 1080p60, scaled by pixel count; 30 fps gets 60% (screen content changes
+// less per frame, so halving the frames doesn't halve the bits).
+int video_kbps_for(const Resolution& r, int fps) {
+  double kbps = 8000.0 * r.width * r.height / (1920.0 * 1080.0);
+  if (fps < 60) kbps *= 0.6;
+  return static_cast<int>(kbps / 100) * 100;
+}
+
 struct Options {
   std::vector<std::string> brokers = RoomChannel::default_brokers();
   std::string room;  // fixed invite code for --test-host
@@ -109,6 +124,8 @@ struct Options {
   std::optional<CaptureTarget> test_switch;  // switch to this halfway through --test-host
   std::string test_watch;  // invite code to watch
   int test_seconds = 6;
+  int resolution = 0;  // index into kResolutions
+  int frame_rate = 0;  // index into kFrameRates
 };
 
 class MainFrame : public wxFrame {
@@ -127,6 +144,21 @@ class MainFrame : public wxFrame {
                     wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
     invite_row->Add(room_, 1, wxRIGHT, FromDIP(8));
     invite_row->Add(copy_, 0);
+
+    // Fixed for the whole transmission: the encoder size can't change mid-stream.
+    auto* quality_row = new wxBoxSizer(wxHORIZONTAL);
+    resolution_ = new wxChoice(panel, wxID_ANY);
+    for (const auto& r : kResolutions) resolution_->Append(std::format("{}x{}", r.width, r.height));
+    resolution_->SetSelection(0);
+    frame_rate_ = new wxChoice(panel, wxID_ANY);
+    for (int fps : kFrameRates) frame_rate_->Append(std::format("{} fps", fps));
+    frame_rate_->SetSelection(0);
+    quality_row->Add(new wxStaticText(panel, wxID_ANY, wxString::FromUTF8("Resolução")), 0,
+                     wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+    quality_row->Add(resolution_, 0, wxRIGHT, FromDIP(16));
+    quality_row->Add(new wxStaticText(panel, wxID_ANY, "Quadros"), 0,
+                     wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+    quality_row->Add(frame_rate_, 0);
 
     auto* buttons = new wxBoxSizer(wxHORIZONTAL);
     stream_ = new wxButton(panel, wxID_ANY, wxString::FromUTF8("Transmitir"));
@@ -149,6 +181,7 @@ class MainFrame : public wxFrame {
                           FromDIP(wxSize(-1, 110)), wxTE_MULTILINE | wxTE_READONLY);
 
     sizer->Add(invite_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    sizer->Add(quality_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
     sizer->Add(buttons, 0, wxEXPAND | wxALL, FromDIP(12));
     sizer->Add(preview_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(12));
     sizer->Add(status_, 0, wxEXPAND | wxALL, FromDIP(12));
@@ -172,6 +205,11 @@ class MainFrame : public wxFrame {
   bool StartHosting(const CaptureTarget& target, std::string room = {}) {
     HostPipeline::Config config;
     config.target = target;
+    const Resolution& res = kResolutions[resolution_->GetSelection()];
+    config.max_width = res.width;
+    config.max_height = res.height;
+    config.fps = kFrameRates[frame_rate_->GetSelection()];
+    config.video_kbps = video_kbps_for(res, config.fps);
     std::string error;
     if (!host_.start(config, preview_->GetHWND(), error)) {
       Log("Erro: " + error);
@@ -220,6 +258,10 @@ class MainFrame : public wxFrame {
   void SetTest(int seconds) { test_seconds_ = seconds; }
   // Hosting test: switch to `target` halfway through.
   void SetTestSwitch(const CaptureTarget& target) { test_switch_ = target; }
+  void SetQuality(int resolution, int frame_rate) {
+    resolution_->SetSelection(resolution);
+    frame_rate_->SetSelection(frame_rate);
+  }
   void FailTest() { Finish(false); }
 
  private:
@@ -261,6 +303,8 @@ class MainFrame : public wxFrame {
     ticks_ = 0;
     viewers_ = 0;
     bool idle = mode == Mode::Idle;
+    resolution_->Enable(idle);
+    frame_rate_->Enable(idle);
     stream_->Enable(idle);
     watch_->Enable(idle);
     copy_->Enable(mode == Mode::Hosting);
@@ -340,6 +384,8 @@ class MainFrame : public wxFrame {
   Mode mode_ = Mode::Idle;
   wxTextCtrl* room_ = nullptr;
   wxButton* copy_ = nullptr;
+  wxChoice* resolution_ = nullptr;
+  wxChoice* frame_rate_ = nullptr;
   wxButton* stream_ = nullptr;
   wxButton* switch_ = nullptr;
   wxButton* watch_ = nullptr;
@@ -392,6 +438,16 @@ class App : public wxApp {
         opt.room = *v;
       } else if (auto v = value("--test-seconds=")) {
         opt.test_seconds = std::atoi(v->c_str());
+      } else if (auto v = value("--size=")) {  // e.g. 1280x720, one of kResolutions
+        for (int r = 0; r < int(std::size(kResolutions)); ++r) {
+          if (*v == std::format("{}x{}", kResolutions[r].width, kResolutions[r].height)) {
+            opt.resolution = r;
+          }
+        }
+      } else if (auto v = value("--fps=")) {
+        for (int f = 0; f < int(std::size(kFrameRates)); ++f) {
+          if (std::atoi(v->c_str()) == kFrameRates[f]) opt.frame_rate = f;
+        }
       } else if (auto v = value("--test-watch=")) {
         opt.test_watch = *v;
       } else if (auto v = value("--test-switch=")) {
@@ -410,6 +466,7 @@ class App : public wxApp {
     }
 
     auto* frame = new MainFrame(report, opt.brokers);
+    frame->SetQuality(opt.resolution, opt.frame_rate);
     frame->Show();
     if (opt.test_host) {
       frame->SetTest(opt.test_seconds);

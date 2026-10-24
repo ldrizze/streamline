@@ -114,8 +114,9 @@ void HostSession::add_peer(const std::string& id) {
     GstPad* sink = gst_element_request_pad(p.webrtc, templ, nullptr, caps);
     GstWebRTCRTPTransceiver* trans = nullptr;
     g_object_get(sink, "transceiver", &trans, nullptr);
+    // NACK: lost packets are retransmitted (RTX) instead of corrupting the picture.
     g_object_set(trans, "direction", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_SENDONLY,
-                 "codec-preferences", caps, nullptr);
+                 "codec-preferences", caps, "do-nack", TRUE, nullptr);
     gst_object_unref(trans);
     GstPad* pay_src = gst_element_get_static_pad(p.elements[m * 2 + 1], "src");
     gst_pad_link(pay_src, sink);

@@ -1,5 +1,7 @@
 #include "viewer/viewer_session.h"
 
+#include <format>
+
 #include <gst/sdp/sdp.h>
 #include <gst/video/videooverlay.h>
 #include <gst/webrtc/webrtc.h>
@@ -11,15 +13,22 @@ namespace {
 constexpr const char* kStunServer = "stun://stun.l.google.com:19302";
 constexpr guint kJoinRetrySec = 3;
 constexpr size_t kMaxPendingIce = 64;
+// Jitter buffer: room for a NACK round trip before a late packet counts as lost.
+constexpr guint kLatencyMs = 200;
+
+// On a loss that NACK couldn't repair, drop frames until a keyframe instead of decoding
+// garbage, and ask the host for one (RTCP PLI) so the picture freezes briefly rather
+// than smearing until the next periodic keyframe.
+constexpr const char* kDepayLoss = "request-keyframe=true wait-for-keyframe=true";
 
 std::string video_branch(const std::string& encoding) {
   if (encoding == "AV1") {
-    return std::string("queue ! rtpav1depay ! av1parse ! ") +
-           (has_element("d3d11av1dec") ? "d3d11av1dec" : "dav1ddec") +
-           " ! d3d11videosink name=vsink sync=false";
+    return std::format("queue ! rtpav1depay {} ! av1parse ! {} ! d3d11videosink name=vsink sync=false",
+                       kDepayLoss, has_element("d3d11av1dec") ? "d3d11av1dec" : "dav1ddec");
   }
   if (encoding == "VP8") {
-    return "queue ! rtpvp8depay ! vp8dec ! d3d11videosink name=vsink sync=false";
+    return std::format("queue ! rtpvp8depay {} ! vp8dec ! d3d11videosink name=vsink sync=false",
+                       kDepayLoss);
   }
   return {};
 }
@@ -43,8 +52,14 @@ bool ViewerSession::start(const std::string& room, const std::vector<std::string
   pipeline_ = gst_pipeline_new("viewer");
   webrtc_ = gst_element_factory_make("webrtcbin", "webrtc");
   g_object_set(webrtc_, "bundle-policy", GST_WEBRTC_BUNDLE_POLICY_MAX_BUNDLE, "stun-server",
-               kStunServer, "latency", 100, nullptr);
+               kStunServer, "latency", kLatencyMs, nullptr);
   gst_bin_add(GST_BIN(pipeline_), webrtc_);
+  // Transceivers come from the host's offer; enable NACK before the answer is created.
+  g_signal_connect(webrtc_, "on-new-transceiver",
+                   G_CALLBACK(+[](GstElement*, GstWebRTCRTPTransceiver* trans, gpointer) {
+                     g_object_set(trans, "do-nack", TRUE, nullptr);
+                   }),
+                   nullptr);
   g_signal_connect(webrtc_, "pad-added", G_CALLBACK(on_pad_added), this);
   g_signal_connect(webrtc_, "on-ice-candidate", G_CALLBACK(on_ice_candidate), this);
   meter_.reset();

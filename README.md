@@ -37,7 +37,9 @@
 
 1. Baixe a [última versão](https://github.com/ldrizze/streamline/releases) — o instalador
    `Streamline-Setup-*.exe` ou o zip portátil.
-2. **Quem transmite:** clique em **Transmitir**, escolha uma tela ou janela e clique em
+2. **Quem transmite:** escolha a resolução (1920x1080, 1366x768 ou 1280x720) e a taxa de
+   quadros (60 ou 30 fps). Resoluções e taxas menores usam menos banda e ajudam em
+   conexões fracas. Depois clique em **Transmitir**, escolha uma tela ou janela e clique em
    **Copiar** para pegar o código de convite. Para mudar o que é transmitido (outra
    janela ou a tela toda), use **Trocar fonte**: a sala, o convite e os espectadores
    continuam conectados.
@@ -77,7 +79,10 @@ conectados. Transmissor e espectadores precisam usar a mesma versão (enquanto 0
   não veem o código, a chave nem o conteúdo; mensagens forjadas, repetidas ou antigas são
   descartadas.
 - **Rede:** só STUN público, **sem servidor de relay (TURN), por escolha**: a mídia nunca
-  passa por terceiros.
+  passa por terceiros. Pacotes de vídeo perdidos são retransmitidos (NACK/RTX). Se a
+  retransmissão não chegar a tempo (buffer de 200 ms), o espectador descarta os quadros
+  incompletos e pede um keyframe (PLI). A imagem congela por um instante em vez de ficar
+  corrompida.
 
 ## Limitações conhecidas
 
@@ -127,6 +132,8 @@ com instalador e zip em tags `v*`.
 | `--test-switch=monitor\|<pid>` | Com `--test-host`, troca para essa fonte na metade do teste |
 | `--test-watch=<convite>` | Assiste à sala e encerra com sucesso se chegarem quadros |
 | `--room=<convite>` | Convite fixo para `--test-host` |
+| `--size=1920x1080\|1366x768\|1280x720` | Resolução de transmissão pré-selecionada |
+| `--fps=60\|30` | Taxa de quadros pré-selecionada |
 | `--test-seconds=N` | Duração dos testes (padrão 6) |
 
 ### Estrutura

@@ -7,6 +7,28 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ## [Não lançado]
 
+## [0.5.0] - 2026-10-24
+
+Compatível com a 0.2.0 em diante (mesmo protocolo de sinalização). A recuperação de
+perdas só funciona por completo com transmissor e espectador na 0.5.0.
+
+### Adicionado
+- Configurações de transmissão: resolução (1920x1080, 1366x768 ou 1280x720) e taxa de
+  quadros (60 ou 30 fps), escolhidas antes de transmitir. O bitrate acompanha a
+  escolha: 8 Mbps em 1080p60, menos nas opções menores (cerca de 2,1 Mbps em 720p30).
+- `--size=LxA` e `--fps=N` para pré-selecionar essas opções.
+- Retransmissão de pacotes perdidos (NACK/RTX) entre transmissor e espectador.
+
+### Corrigido
+- Com perda de pacotes na rede, o vídeo ficava corrompido, com blocos misturados, por
+  até 2 segundos, até o próximo keyframe. Agora o espectador descarta os quadros
+  incompletos e pede um keyframe na hora: a imagem congela por um instante e volta
+  limpa.
+
+### Alterado
+- O buffer de recepção do espectador subiu de 100 para 200 ms, para dar tempo às
+  retransmissões (a latência aumenta 0,1 s).
+
 ## [0.4.0] - 2026-10-24
 
 Compatível com a 0.2.0 em diante (mesmo protocolo de sinalização).
@@ -121,7 +143,8 @@ Primeira versão de desenvolvimento.
 - Executáveis não assinados: o SmartScreen avisa na primeira execução.
 - Requer Windows 10 2004 (build 19041) ou mais novo, 64 bits.
 
-[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.4.0...HEAD
+[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/ldrizze/streamline/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/ldrizze/streamline/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/ldrizze/streamline/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/ldrizze/streamline/compare/v0.2.0...v0.3.0
