@@ -106,6 +106,7 @@ struct Options {
   std::vector<std::string> brokers = RoomChannel::default_brokers();
   std::string room;  // fixed invite code for --test-host
   std::optional<CaptureTarget> test_host;
+  std::optional<CaptureTarget> test_switch;  // switch to this halfway through --test-host
   std::string test_watch;  // invite code to watch
   int test_seconds = 6;
 };
@@ -130,9 +131,12 @@ class MainFrame : public wxFrame {
     auto* buttons = new wxBoxSizer(wxHORIZONTAL);
     stream_ = new wxButton(panel, wxID_ANY, wxString::FromUTF8("Transmitir"));
     watch_ = new wxButton(panel, wxID_ANY, wxString::FromUTF8("Assistir"));
+    switch_ = new wxButton(panel, wxID_ANY, wxString::FromUTF8("Trocar fonte"));
+    switch_->Disable();
     stop_ = new wxButton(panel, wxID_ANY, wxString::FromUTF8("Parar"));
     stop_->Disable();
     buttons->Add(stream_, 1, wxRIGHT, FromDIP(8));
+    buttons->Add(switch_, 1, wxRIGHT, FromDIP(8));
     buttons->Add(watch_, 1, wxRIGHT, FromDIP(8));
     buttons->Add(stop_, 0);
 
@@ -154,6 +158,7 @@ class MainFrame : public wxFrame {
     SetIcons(wxIconBundle("appicon", nullptr));
 
     stream_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { PickSource(); });
+    switch_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { PickNewSource(); });
     watch_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AskRoomAndWatch(); });
     stop_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Stop(); });
     copy_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CopyInvite(); });
@@ -200,8 +205,21 @@ class MainFrame : public wxFrame {
     return true;
   }
 
+  // Room, invite code and viewer connections stay as they are; only the capture changes.
+  bool SwitchSource(const CaptureTarget& target) {
+    std::string error;
+    if (!host_.switch_source(target, error)) {
+      Log("Erro ao trocar a fonte: " + error);
+      return false;
+    }
+    Log("Fonte trocada: " + host_.description());
+    return true;
+  }
+
   // Test mode: run for `seconds`, print the log and stats, exit 0 if video frames flowed.
   void SetTest(int seconds) { test_seconds_ = seconds; }
+  // Hosting test: switch to `target` halfway through.
+  void SetTestSwitch(const CaptureTarget& target) { test_switch_ = target; }
   void FailTest() { Finish(false); }
 
  private:
@@ -210,6 +228,11 @@ class MainFrame : public wxFrame {
   void PickSource() {
     SourcePickerDialog dlg(this);
     if (dlg.ShowModal() == wxID_OK) StartHosting(dlg.selection());
+  }
+
+  void PickNewSource() {
+    SourcePickerDialog dlg(this);
+    if (dlg.ShowModal() == wxID_OK && mode_ == Mode::Hosting) SwitchSource(dlg.selection());
   }
 
   void AskRoomAndWatch() {
@@ -241,6 +264,7 @@ class MainFrame : public wxFrame {
     stream_->Enable(idle);
     watch_->Enable(idle);
     copy_->Enable(mode == Mode::Hosting);
+    switch_->Enable(mode == Mode::Hosting);
     stop_->Enable(!idle);
     if (idle) {
       timer_.Stop();
@@ -292,6 +316,10 @@ class MainFrame : public wxFrame {
       test_log_ += line + "\n";
       // Watching: success means frames arrived over WebRTC at some point.
       if (fps > 0) frames_seen_ = true;
+      if (test_switch_ && ticks_ / 4 == test_seconds_ / 2) {
+        if (!SwitchSource(*test_switch_)) Finish(false);
+        test_switch_.reset();
+      }
       if (ticks_ / 4 >= test_seconds_) Finish(frames_seen_);
     }
   }
@@ -313,6 +341,7 @@ class MainFrame : public wxFrame {
   wxTextCtrl* room_ = nullptr;
   wxButton* copy_ = nullptr;
   wxButton* stream_ = nullptr;
+  wxButton* switch_ = nullptr;
   wxButton* watch_ = nullptr;
   wxButton* stop_ = nullptr;
   wxPanel* preview_ = nullptr;
@@ -322,6 +351,7 @@ class MainFrame : public wxFrame {
   int viewers_ = 0;
   int test_seconds_ = 0;
   bool frames_seen_ = false;
+  std::optional<CaptureTarget> test_switch_;
   std::string test_log_;
 };
 
@@ -364,6 +394,12 @@ class App : public wxApp {
         opt.test_seconds = std::atoi(v->c_str());
       } else if (auto v = value("--test-watch=")) {
         opt.test_watch = *v;
+      } else if (auto v = value("--test-switch=")) {
+        opt.test_switch = test_target(*v);
+        if (!opt.test_switch) {
+          console_print("test switch target not found\n");
+          std::exit(2);
+        }
       } else if (auto v = value("--test-host=")) {
         opt.test_host = test_target(*v);
         if (!opt.test_host) {
@@ -377,6 +413,7 @@ class App : public wxApp {
     frame->Show();
     if (opt.test_host) {
       frame->SetTest(opt.test_seconds);
+      if (opt.test_switch) frame->SetTestSwitch(*opt.test_switch);
       if (!frame->StartHosting(*opt.test_host, opt.room)) frame->FailTest();
     } else if (!opt.test_watch.empty()) {
       frame->SetTest(opt.test_seconds);

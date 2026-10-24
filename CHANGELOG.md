@@ -7,6 +7,22 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ## [Não lançado]
 
+## [0.4.0] - 2026-10-24
+
+Compatível com a 0.2.0 em diante (mesmo protocolo de sinalização).
+
+### Adicionado
+- Botão **Trocar fonte**: durante a transmissão, troca a janela capturada por outra ou
+  pela tela toda (e vice-versa) sem fechar a sala. O convite continua o mesmo e os
+  espectadores seguem conectados, sem renegociar; o áudio acompanha a nova fonte.
+- `--test-switch=monitor|<pid>`: com `--test-host`, troca a fonte na metade do teste.
+
+### Alterado
+- O vídeo é sempre codificado no tamanho do maior monitor (limitado a 1920x1080), para
+  caber qualquer fonte escolhida depois; janelas menores são ampliadas com tarjas
+  pretas, mantendo a proporção.
+- O Discord passa a ser detectado também a cada troca de fonte.
+
 ## [0.3.1] - 2026-10-24
 
 Compatível com a 0.2.0 e a 0.3.0 (mesmo protocolo de sinalização).
@@ -105,7 +121,8 @@ Primeira versão de desenvolvimento.
 - Executáveis não assinados: o SmartScreen avisa na primeira execução.
 - Requer Windows 10 2004 (build 19041) ou mais novo, 64 bits.
 
-[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.3.1...HEAD
+[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ldrizze/streamline/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/ldrizze/streamline/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/ldrizze/streamline/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ldrizze/streamline/compare/v0.1.0...v0.2.0

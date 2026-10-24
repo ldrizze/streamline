@@ -38,7 +38,9 @@
 1. Baixe a [última versão](https://github.com/ldrizze/streamline/releases) — o instalador
    `Streamline-Setup-*.exe` ou o zip portátil.
 2. **Quem transmite:** clique em **Transmitir**, escolha uma tela ou janela e clique em
-   **Copiar** para pegar o código de convite.
+   **Copiar** para pegar o código de convite. Para mudar o que é transmitido (outra
+   janela ou a tela toda), use **Trocar fonte**: a sala, o convite e os espectadores
+   continuam conectados.
 3. **Quem assiste:** clique em **Assistir** e cole o código.
 
 A barra de status mostra fps, kbps, nível de áudio e quantos espectadores estão
@@ -87,8 +89,8 @@ conectados. Transmissor e espectadores precisam usar a mesma versão (enquanto 0
 - Conexão entre redes diferentes ainda não foi testada.
 - O bitrate do AV1 da AMF oscila bastante (picos acima do alvo de 8 Mbps).
 - No Windows 10, a borda amarela de captura do Windows não pode ser removida.
-- O Discord é detectado ao iniciar a transmissão; se for aberto depois, o áudio dele entra
-  até a próxima transmissão.
+- O Discord é detectado ao iniciar a transmissão ou trocar a fonte; se for aberto depois,
+  o áudio dele entra até a próxima troca.
 - Executáveis não assinados: o SmartScreen avisa na primeira execução.
 
 ## Compilando
@@ -122,6 +124,7 @@ com instalador e zip em tags `v*`.
 | `--list-sources` | Lista monitores, janelas capturáveis e o Discord detectado |
 | `--brokers=url1,url2` | Usa outros brokers MQTT (WebSocket) |
 | `--test-host=monitor\|<pid>` | Transmite a tela ou a janela do PID e encerra com o resultado |
+| `--test-switch=monitor\|<pid>` | Com `--test-host`, troca para essa fonte na metade do teste |
 | `--test-watch=<convite>` | Assiste à sala e encerra com sucesso se chegarem quadros |
 | `--room=<convite>` | Convite fixo para `--test-host` |
 | `--test-seconds=N` | Duração dos testes (padrão 6) |
