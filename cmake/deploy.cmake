@@ -1,6 +1,7 @@
 # `cmake --install build --prefix dist` produces a self-contained folder:
-#   dist/bin/                 streamline.exe, streamline-signal.exe and every DLL they need
+#   dist/bin/                 streamline.exe and every DLL it needs
 #   dist/lib/gstreamer-1.0/   only the GStreamer plugins we use
+#   dist/lib/gio/modules/     the OpenSSL TLS backend (wss:// to the MQTT brokers)
 # Keep STREAMLINE_PLUGINS in sync with kRequiredElements in src/common/runtime.cpp.
 
 set(STREAMLINE_PLUGINS
@@ -17,10 +18,17 @@ foreach(p IN LISTS STREAMLINE_PLUGINS)
   list(APPEND _plugin_files "${f}")
 endforeach()
 
+# Uses the Windows certificate store (CRYPT32), so no CA bundle has to be shipped.
+set(_gio_tls "${GIO_MODULES_DIR}/libgioopenssl.dll")
+if(NOT EXISTS "${_gio_tls}")
+  message(FATAL_ERROR "GIO TLS module not found: ${_gio_tls} (install glib-networking)")
+endif()
+
 get_filename_component(_mingw_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
 
-install(TARGETS streamline streamline-signal RUNTIME DESTINATION bin)
+install(TARGETS streamline RUNTIME DESTINATION bin)
 install(FILES ${_plugin_files} DESTINATION lib/gstreamer-1.0)
+install(FILES "${_gio_tls}" DESTINATION lib/gio/modules)
 # Our license + full GPL/LGPL texts; tools/collect-licenses.sh adds the per-package notices.
 install(FILES LICENSE DESTINATION . RENAME LICENSE.txt)
 install(DIRECTORY packaging/licenses/ DESTINATION licenses)
@@ -30,8 +38,8 @@ install(CODE "
     cmake_policy(SET CMP0207 NEW)
   endif()
   file(GET_RUNTIME_DEPENDENCIES
-    EXECUTABLES \"$<TARGET_FILE:streamline>\" \"$<TARGET_FILE:streamline-signal>\"
-    MODULES ${_plugin_files}
+    EXECUTABLES \"$<TARGET_FILE:streamline>\"
+    MODULES ${_plugin_files} \"${_gio_tls}\"
     DIRECTORIES \"${_mingw_bin}\"
     RESOLVED_DEPENDENCIES_VAR _deps
     UNRESOLVED_DEPENDENCIES_VAR _unresolved

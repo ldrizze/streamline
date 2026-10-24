@@ -37,7 +37,9 @@ jobs:
             mingw-w64-ucrt-x86_64-gst-plugins-rs
             mingw-w64-ucrt-x86_64-libnice
             mingw-w64-ucrt-x86_64-libsoup3
+            mingw-w64-ucrt-x86_64-glib-networking
             mingw-w64-ucrt-x86_64-json-glib
+            mingw-w64-ucrt-x86_64-libsodium
             mingw-w64-ucrt-x86_64-wxwidgets3.3-msw
 
       - name: Version
@@ -62,7 +64,7 @@ jobs:
       - name: Build and package dist/
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
-            -DSTREAMLINE_VERSION="${{ steps.version.outputs.version }}"
+            -DSTREAMLINE_VERSION_OVERRIDE="${{ steps.version.outputs.version }}"
           cmake --build build
           cmake --install build --prefix dist
           bash tools/collect-licenses.sh dist

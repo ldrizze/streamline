@@ -1,13 +1,11 @@
 #pragma once
 
-// Tiny json-glib wrapper for the flat messages of the signaling protocol:
-//   {"type": "join", "room": "K7Q2MX", "role": "host" | "viewer"}
-//   {"type": "joined", "id": "p3"}
-//   {"type": "viewer-joined" | "viewer-left", "id": "p4"}   (to the host)
-//   {"type": "host-left"}                                   (to viewers)
-//   {"type": "offer" | "answer", "to": "p4", "sdp": "..."}  (server adds "from")
-//   {"type": "ice", "to": "p4", "candidate": "...", "mline": 0}
-//   {"type": "error", "message": "..."}
+// Tiny json-glib wrapper for the flat messages of the signaling protocol (sent
+// encrypted through RoomChannel, which adds "v", "id", "from" and "ts"):
+//   {"type": "join"}                                         viewer -> room, repeated
+//   {"type": "offer" | "answer", "to": "<id>", "sdp": "..."}
+//   {"type": "ice", "to": "<id>", "candidate": "...", "mline": 0}
+//   {"type": "bye"}                                          leaving (also the MQTT will)
 
 #include <cstdint>
 #include <string>

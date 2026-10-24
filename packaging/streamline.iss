@@ -3,11 +3,11 @@
 ;   ISCC /DAppVersion=1.2.3 packaging\streamline.iss  ->  build\installer\Streamline-Setup-1.2.3.exe
 
 #ifndef AppVersion
-  #define AppVersion "0.1.0"
+  #define AppVersion "0.2.0"
 #endif
-; Numeric x.y.z for the file version resource (AppVersion may be "0.1.0-ci.12").
+; Numeric x.y.z for the file version resource (AppVersion may be "0.2.0-ci.12").
 #ifndef NumericVersion
-  #define NumericVersion "0.1.0"
+  #define NumericVersion "0.2.0"
 #endif
 #define DistDir "..\dist"
 
@@ -47,9 +47,13 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "{#DistDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Left over by 0.1.0, which shipped its own signaling server.
+Type: files; Name: "{app}\bin\streamline-signal.exe"
+Type: files; Name: "{autoprograms}\Streamline Signal Server.lnk"
+
 [Icons]
 Name: "{autoprograms}\Streamline"; Filename: "{app}\bin\streamline.exe"
-Name: "{autoprograms}\Streamline Signal Server"; Filename: "{app}\bin\streamline-signal.exe"
 Name: "{autodesktop}\Streamline"; Filename: "{app}\bin\streamline.exe"; Tasks: desktopicon
 
 [Run]

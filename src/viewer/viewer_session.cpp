@@ -9,6 +9,8 @@ namespace streamline {
 namespace {
 
 constexpr const char* kStunServer = "stun://stun.l.google.com:19302";
+constexpr guint kJoinRetrySec = 3;
+constexpr size_t kMaxPendingIce = 64;
 
 std::string video_branch(const std::string& encoding) {
   if (encoding == "AV1") {
@@ -28,12 +30,15 @@ constexpr const char* kAudioBranch =
 
 }  // namespace
 
-bool ViewerSession::start(const std::string& url, const std::string& room, HWND video_window,
-                          Callbacks callbacks, std::string& error) {
+bool ViewerSession::start(const std::string& room, const std::vector<std::string>& brokers,
+                          HWND video_window, Callbacks callbacks, std::string& error) {
   stop();
+  if (!RoomChannel::valid_room_code(room)) {
+    error = "Código de convite inválido.";
+    return false;
+  }
   callbacks_ = std::move(callbacks);
   video_window_ = video_window;
-  room_ = room;
 
   pipeline_ = gst_pipeline_new("viewer");
   webrtc_ = gst_element_factory_make("webrtcbin", "webrtc");
@@ -53,26 +58,43 @@ bool ViewerSession::start(const std::string& url, const std::string& room, HWND 
   }
 
   thread_.start();
-  thread_.invoke([this, url] {
-    signaling_.connect(
-        url, [this](const json::Message& m) { on_signal(m); },
-        [this, url](bool connected, const std::string& err) {
-          if (!connected) {
-            log(err);
-            return;
-          }
-          log("Conectado ao servidor " + url);
-          signaling_.send(
-              json::Message().set("type", "join").set("room", room_).set("role", "viewer"));
+  thread_.invoke([this, room, brokers] {
+    channel_.open(
+        room, brokers, [this](const json::Message& m) { on_signal(m); },
+        [this](const std::string& s) { log(s); },
+        [this] {
+          log("Procurando o transmissor na sala...");
+          send_join();
+          // The host may not be there yet (or missed it): ask again until an offer arrives.
+          join_timer_ = g_timeout_source_new_seconds(kJoinRetrySec);
+          g_source_set_callback(
+              join_timer_,
+              [](gpointer self) -> gboolean {
+                static_cast<ViewerSession*>(self)->send_join();
+                return G_SOURCE_CONTINUE;
+              },
+              this, nullptr);
+          g_source_attach(join_timer_, g_main_context_get_thread_default());
         });
   });
   return true;
 }
 
+void ViewerSession::send_join() { channel_.send(json::Message().set("type", "join")); }
+
+void ViewerSession::stop_join_timer() {
+  if (!join_timer_) return;
+  g_source_destroy(join_timer_);
+  g_source_unref(join_timer_);
+  join_timer_ = nullptr;
+}
+
 void ViewerSession::stop() {
   // Tear the pipeline down on the session thread so no callback races the shutdown.
   thread_.stop([this] {
-    signaling_.close();
+    stop_join_timer();
+    pending_ice_.clear();
+    channel_.close();
     if (pipeline_) {
       g_signal_handlers_disconnect_by_data(webrtc_, this);
       gst_element_set_state(pipeline_, GST_STATE_NULL);
@@ -97,20 +119,33 @@ ViewerSession::Stats ViewerSession::stats() {
 
 void ViewerSession::on_signal(const json::Message& m) {
   std::string type = m.str("type");
-  if (type == "joined") {
-    log("Entrou na sala " + room_ + ". Aguardando o transmissor...");
-  } else if (type == "offer") {
-    on_offer(m.str("from"), m.str("sdp"));
-  } else if (type == "ice") {
-    std::string cand = m.str("candidate");
-    if (!cand.empty()) {
-      g_signal_emit_by_name(webrtc_, "add-ice-candidate", static_cast<guint>(m.num("mline")),
-                            cand.c_str());
+  std::string from = m.str("from");
+  if (type == "offer") {
+    if (!host_id_.empty() && from != host_id_) return;  // one host per room
+    stop_join_timer();
+    log("Transmissor encontrado. Negociando...");
+    on_offer(from, m.str("sdp"));
+    // Candidates that overtook the offer (different brokers, no ordering between them).
+    for (const auto& p : pending_ice_) {
+      if (p.from == host_id_) add_remote_ice(p.candidate, p.mline);
     }
-  } else if (type == "host-left") {
+    pending_ice_.clear();
+  } else if (type == "ice" && host_id_.empty()) {
+    if (pending_ice_.size() < kMaxPendingIce) {
+      pending_ice_.push_back({from, m.str("candidate"), static_cast<guint>(m.num("mline"))});
+    }
+  } else if (from != host_id_) {
+    return;  // ignore other viewers
+  } else if (type == "ice") {
+    add_remote_ice(m.str("candidate"), static_cast<guint>(m.num("mline")));
+  } else if (type == "bye") {
     log("O transmissor encerrou.");
-  } else if (type == "error") {
-    log("Servidor: " + m.str("message"));
+  }
+}
+
+void ViewerSession::add_remote_ice(const std::string& candidate, guint mline) {
+  if (!candidate.empty()) {
+    g_signal_emit_by_name(webrtc_, "add-ice-candidate", mline, candidate.c_str());
   }
 }
 
@@ -150,7 +185,7 @@ void ViewerSession::on_answer_created(GstPromise* promise, gpointer self) {
   g_free(text);
   gst_webrtc_session_description_free(answer);
   s->thread_.invoke([s, sdp] {
-    s->signaling_.send(
+    s->channel_.send(
         json::Message().set("type", "answer").set("to", s->host_id_).set("sdp", sdp));
     s->log("Negociação concluída. Conectando...");
   });
@@ -159,7 +194,7 @@ void ViewerSession::on_answer_created(GstPromise* promise, gpointer self) {
 void ViewerSession::on_ice_candidate(GstElement*, guint mline, gchar* candidate, gpointer self) {
   auto* s = static_cast<ViewerSession*>(self);
   s->thread_.invoke([s, cand = std::string(candidate), mline] {
-    s->signaling_.send(json::Message()
+    s->channel_.send(json::Message()
                            .set("type", "ice")
                            .set("to", s->host_id_)
                            .set("candidate", cand)

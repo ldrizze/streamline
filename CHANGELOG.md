@@ -7,9 +7,47 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ## [Não lançado]
 
+## [0.2.0] - 2026-10-24
+
+Sinalização sem servidor próprio. **Incompatível com a 0.1.0**: transmissor e
+espectadores precisam estar na mesma versão.
+
 ### Adicionado
+- Sinalização pelos brokers MQTT públicos (`broker.emqx.io`, `broker.hivemq.com`,
+  `test.mosquitto.org`) via WebSocket seguro, usados ao mesmo tempo: se um cair, os
+  outros seguem. Não é preciso rodar nem configurar servidor algum.
+- Criptografia ponta a ponta da sinalização: cada sala tem um código de convite
+  aleatório de 16 bytes (22 caracteres) do qual derivam o tópico MQTT e uma chave
+  XChaCha20-Poly1305 exclusiva da sala. Os brokers não veem o código, a chave nem o
+  conteúdo (SDP, IPs). Mensagens forjadas, repetidas ou antigas são descartadas.
+- Botão **Copiar** para o código de convite; o espectador só cola o código.
+- Saída de participantes detectada também quando o app fecha sem avisar (last will
+  MQTT, também cifrado).
+- `--brokers=url1,url2` para escolher outros brokers.
 - Ícone próprio do aplicativo (ondas de transmissão), exibido no executável, na
   barra de título, na barra de tarefas e no instalador.
+
+### Alterado
+- O código da sala deixou de ser escolhível/curto (6 letras) e passou a ser o
+  convite aleatório acima.
+- O vídeo começa mais rápido para um espectador novo: um keyframe é pedido quando a
+  conexão P2P se estabelece.
+
+### Removido
+- `streamline-signal` (servidor de sinalização próprio), o campo "Servidor" e a
+  opção `--server`. Atualizar pelo instalador remove o executável antigo.
+
+### Limitações conhecidas
+- Os brokers MQTT públicos são serviços de teste gratuitos, sem garantia de
+  disponibilidade. Eles enxergam o IP de quem se conecta e o volume/horário das
+  mensagens (não o conteúdo).
+- Sem servidor de relay (TURN), por escolha: se os dois lados estiverem atrás de
+  NAT restritivo (CGNAT/NAT simétrico), a conexão P2P não se estabelece.
+- Conexão entre redes diferentes ainda não testada.
+- O bitrate do AV1 da AMF oscila bastante (picos acima do alvo de 8 Mbps).
+- No Windows 10 a borda amarela de captura do Windows não pode ser removida.
+- Executáveis não assinados: o SmartScreen avisa na primeira execução.
+- Requer Windows 10 2004 (build 19041) ou mais novo, 64 bits.
 
 ## [0.1.0] - 2026-10-24
 
@@ -39,5 +77,6 @@ Primeira versão de desenvolvimento.
 - Executáveis não assinados: o SmartScreen avisa na primeira execução.
 - Requer Windows 10 2004 (build 19041) ou mais novo, 64 bits.
 
-[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.1.0...HEAD
+[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ldrizze/streamline/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ldrizze/streamline/releases/tag/v0.1.0

@@ -1,4 +1,5 @@
 // wx first: it pulls in winsock2.h, which must precede windows.h.
+#include <wx/clipbrd.h>
 #include <wx/wx.h>
 
 #include <windows.h>
@@ -6,13 +7,15 @@
 #include <cstdlib>
 #include <format>
 #include <optional>
-#include <random>
+#include <sstream>
 #include <string>
+#include <vector>
 
 #include <gst/gst.h>
 
 #include "app/source_picker.h"
 #include "capture/sources.h"
+#include "common/room_channel.h"
 #include "common/runtime.h"
 #include "host/host_pipeline.h"
 #include "host/host_session.h"
@@ -23,9 +26,8 @@ namespace {
 using streamline::CaptureTarget;
 using streamline::HostPipeline;
 using streamline::HostSession;
+using streamline::RoomChannel;
 using streamline::ViewerSession;
-
-constexpr const char* kDefaultServer = "ws://127.0.0.1:8443/ws";
 
 // GUI-subsystem exe: write to the inherited stdout (pipe/file) or the parent console.
 void console_print(const std::string& text) {
@@ -88,40 +90,39 @@ std::optional<CaptureTarget> test_target(const std::string& spec) {
   return std::nullopt;
 }
 
-// Six characters, no look-alikes (0/O, 1/I).
-std::string new_room_code() {
-  static const char kChars[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  std::random_device rd;
-  std::string code;
-  for (int i = 0; i < 6; ++i) code += kChars[rd() % (sizeof kChars - 1)];
-  return code;
+std::vector<std::string> split_commas(const std::string& s) {
+  std::vector<std::string> out;
+  std::stringstream ss(s);
+  for (std::string item; std::getline(ss, item, ',');) {
+    if (!item.empty()) out.push_back(item);
+  }
+  return out;
 }
 
 struct Options {
-  std::string server = kDefaultServer;
-  std::string room;  // fixed room for --test-host
+  std::vector<std::string> brokers = RoomChannel::default_brokers();
+  std::string room;  // fixed invite code for --test-host
   std::optional<CaptureTarget> test_host;
-  std::string test_watch;  // room to watch
+  std::string test_watch;  // invite code to watch
   int test_seconds = 6;
 };
 
 class MainFrame : public wxFrame {
  public:
-  MainFrame(const std::string& report, const std::string& server)
-      : wxFrame(nullptr, wxID_ANY, "streamline"), timer_(this) {
+  MainFrame(const std::string& report, std::vector<std::string> brokers)
+      : wxFrame(nullptr, wxID_ANY, "streamline"), brokers_(std::move(brokers)), timer_(this) {
     auto* panel = new wxPanel(this);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    auto* server_row = new wxBoxSizer(wxHORIZONTAL);
-    server_ = new wxTextCtrl(panel, wxID_ANY, wxString::FromUTF8(server));
-    room_ = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, FromDIP(wxSize(90, -1)),
-                           wxTE_READONLY | wxTE_CENTER);
-    server_row->Add(new wxStaticText(panel, wxID_ANY, "Servidor"), 0,
+    // Invite code: the only thing viewers need (it is also the room's encryption secret).
+    auto* invite_row = new wxBoxSizer(wxHORIZONTAL);
+    room_ = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_READONLY);
+    copy_ = new wxButton(panel, wxID_ANY, "Copiar");
+    copy_->Disable();
+    invite_row->Add(new wxStaticText(panel, wxID_ANY, "Convite"), 0,
                     wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
-    server_row->Add(server_, 1, wxRIGHT, FromDIP(12));
-    server_row->Add(new wxStaticText(panel, wxID_ANY, "Sala"), 0,
-                    wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
-    server_row->Add(room_, 0);
+    invite_row->Add(room_, 1, wxRIGHT, FromDIP(8));
+    invite_row->Add(copy_, 0);
 
     auto* buttons = new wxBoxSizer(wxHORIZONTAL);
     stream_ = new wxButton(panel, wxID_ANY, wxString::FromUTF8("Transmitir"));
@@ -140,7 +141,7 @@ class MainFrame : public wxFrame {
     log_ = new wxTextCtrl(panel, wxID_ANY, wxString::FromUTF8(report), wxDefaultPosition,
                           FromDIP(wxSize(-1, 110)), wxTE_MULTILINE | wxTE_READONLY);
 
-    sizer->Add(server_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    sizer->Add(invite_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
     sizer->Add(buttons, 0, wxEXPAND | wxALL, FromDIP(12));
     sizer->Add(preview_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(12));
     sizer->Add(status_, 0, wxEXPAND | wxALL, FromDIP(12));
@@ -152,6 +153,7 @@ class MainFrame : public wxFrame {
     stream_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { PickSource(); });
     watch_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { AskRoomAndWatch(); });
     stop_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { Stop(); });
+    copy_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { CopyInvite(); });
     Bind(wxEVT_TIMER, [this](wxTimerEvent&) { OnTick(); });
     Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& e) {
       StopAll();
@@ -167,10 +169,15 @@ class MainFrame : public wxFrame {
       Log("Erro: " + error);
       return false;
     }
-    if (room.empty()) room = new_room_code();
+    if (room.empty()) room = RoomChannel::new_room_code();
+    if (!RoomChannel::valid_room_code(room)) {
+      host_.stop();
+      Log("Erro: código de convite inválido.");
+      return false;
+    }
     room_->SetValue(room);
     Log("Transmitindo: " + host_.description());
-    session_.start(host_, ServerUrl(), room,
+    session_.start(host_, room, brokers_,
                    {[this](const std::string& s) { CallAfter([this, s] { Log(s); }); },
                     [this](int n) { CallAfter([this, n] { viewers_ = n; }); }});
     EnterMode(Mode::Hosting);
@@ -179,13 +186,13 @@ class MainFrame : public wxFrame {
 
   bool StartWatching(const std::string& room) {
     std::string error;
-    room_->SetValue(room);
-    if (!viewer_.start(ServerUrl(), room, preview_->GetHWND(),
+    if (!viewer_.start(room, brokers_, preview_->GetHWND(),
                        {[this](const std::string& s) { CallAfter([this, s] { Log(s); }); }},
                        error)) {
       Log("Erro: " + error);
       return false;
     }
+    room_->SetValue(room);
     EnterMode(Mode::Watching);
     return true;
   }
@@ -197,18 +204,30 @@ class MainFrame : public wxFrame {
  private:
   enum class Mode { Idle, Hosting, Watching };
 
-  std::string ServerUrl() const { return std::string(server_->GetValue().utf8_str()); }
-
   void PickSource() {
     SourcePickerDialog dlg(this);
     if (dlg.ShowModal() == wxID_OK) StartHosting(dlg.selection());
   }
 
   void AskRoomAndWatch() {
-    wxTextEntryDialog dlg(this, wxString::FromUTF8("Código da sala:"), "Assistir");
+    wxTextEntryDialog dlg(this, wxString::FromUTF8("Cole o código de convite:"), "Assistir");
     if (dlg.ShowModal() != wxID_OK) return;
-    std::string room(dlg.GetValue().Upper().Trim().Trim(false).utf8_str());
-    if (!room.empty()) StartWatching(room);
+    std::string room(dlg.GetValue().Trim().Trim(false).utf8_str());  // case-sensitive
+    if (room.empty()) return;
+    if (!RoomChannel::valid_room_code(room)) {
+      wxMessageBox(wxString::FromUTF8("Código de convite inválido."), "streamline",
+                   wxICON_WARNING, this);
+      return;
+    }
+    StartWatching(room);
+  }
+
+  void CopyInvite() {
+    if (wxTheClipboard->Open()) {
+      wxTheClipboard->SetData(new wxTextDataObject(room_->GetValue()));
+      wxTheClipboard->Close();
+      Log("Código de convite copiado.");
+    }
   }
 
   void EnterMode(Mode mode) {
@@ -218,7 +237,7 @@ class MainFrame : public wxFrame {
     bool idle = mode == Mode::Idle;
     stream_->Enable(idle);
     watch_->Enable(idle);
-    server_->Enable(idle);
+    copy_->Enable(mode == Mode::Hosting);
     stop_->Enable(!idle);
     if (idle) {
       timer_.Stop();
@@ -282,13 +301,14 @@ class MainFrame : public wxFrame {
 
   void Log(const std::string& text) { log_->AppendText(wxString::FromUTF8("\n" + text)); }
 
+  std::vector<std::string> brokers_;
   HostPipeline host_;
   HostSession session_;
   ViewerSession viewer_;
   wxTimer timer_;
   Mode mode_ = Mode::Idle;
-  wxTextCtrl* server_ = nullptr;
   wxTextCtrl* room_ = nullptr;
+  wxButton* copy_ = nullptr;
   wxButton* stream_ = nullptr;
   wxButton* watch_ = nullptr;
   wxButton* stop_ = nullptr;
@@ -333,8 +353,8 @@ class App : public wxApp {
       } else if (arg == "--list-sources") {
         console_print(sources_report());
         std::exit(0);
-      } else if (auto v = value("--server=")) {
-        opt.server = *v;
+      } else if (auto v = value("--brokers=")) {
+        opt.brokers = split_commas(*v);
       } else if (auto v = value("--room=")) {
         opt.room = *v;
       } else if (auto v = value("--test-seconds=")) {
@@ -350,7 +370,7 @@ class App : public wxApp {
       }
     }
 
-    auto* frame = new MainFrame(report, opt.server);
+    auto* frame = new MainFrame(report, opt.brokers);
     frame->Show();
     if (opt.test_host) {
       frame->SetTest(opt.test_seconds);

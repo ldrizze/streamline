@@ -29,31 +29,24 @@ GstElement* make(const char* factory, const std::string& name) {
 
 }  // namespace
 
-void HostSession::start(HostPipeline& pipeline, const std::string& url, const std::string& room,
-                        Callbacks callbacks) {
+void HostSession::start(HostPipeline& pipeline, const std::string& room,
+                        const std::vector<std::string>& brokers, Callbacks callbacks) {
   stop();
   pipeline_ = &pipeline;
   callbacks_ = std::move(callbacks);
-  room_ = room;
   thread_.start();
-  thread_.invoke([this, url] {
-    signaling_.connect(
-        url, [this](const json::Message& m) { on_signal(m); },
-        [this, url](bool connected, const std::string& error) {
-          if (!connected) {
-            log(error);
-            return;
-          }
-          log("Conectado ao servidor " + url);
-          signaling_.send(json::Message().set("type", "join").set("room", room_).set("role", "host"));
-        });
+  thread_.invoke([this, room, brokers] {
+    channel_.open(
+        room, brokers, [this](const json::Message& m) { on_signal(m); },
+        [this](const std::string& s) { log(s); },
+        [this] { log("Sala aberta. Envie o código de convite aos espectadores."); });
   });
 }
 
 void HostSession::stop() {
   // Elements belong to the HostPipeline's bin; it tears them down when it stops.
   thread_.stop([this] {
-    signaling_.close();
+    channel_.close();
     for (auto& [id, peer] : peers_) disconnect_handlers(peer.webrtc);
     peers_.clear();
   });
@@ -62,18 +55,15 @@ void HostSession::stop() {
 
 void HostSession::on_signal(const json::Message& m) {
   std::string type = m.str("type");
-  if (type == "joined") {
-    log("Sala " + room_ + " aberta. Aguardando espectadores.");
-  } else if (type == "viewer-joined") {
-    add_peer(m.str("id"));
-  } else if (type == "viewer-left") {
-    remove_peer(m.str("id"));
+  std::string from = m.str("from");
+  if (type == "join") {
+    add_peer(from);  // viewers repeat "join" until they get an offer; duplicates are ignored
+  } else if (type == "bye") {
+    remove_peer(from);
   } else if (type == "answer") {
-    on_answer(m.str("from"), m.str("sdp"));
+    on_answer(from, m.str("sdp"));
   } else if (type == "ice") {
-    on_remote_ice(m.str("from"), m.str("candidate"), static_cast<int>(m.num("mline")));
-  } else if (type == "error") {
-    log("Servidor: " + m.str("message"));
+    on_remote_ice(from, m.str("candidate"), static_cast<int>(m.num("mline")));
   }
 }
 
@@ -219,7 +209,7 @@ void HostSession::on_offer_created(GstPromise* promise, gpointer ctx) {
     auto it = s->peers_.find(id);
     if (it != s->peers_.end()) {
       g_signal_emit_by_name(it->second.webrtc, "set-local-description", offer, nullptr);
-      s->signaling_.send(json::Message().set("type", "offer").set("to", id).set("sdp", sdp));
+      s->channel_.send(json::Message().set("type", "offer").set("to", id).set("sdp", sdp));
     }
     gst_webrtc_session_description_free(offer);
   });
@@ -245,7 +235,7 @@ void HostSession::on_ice_candidate(GstElement*, guint mline, gchar* candidate, g
   auto* c = static_cast<PeerCtx*>(ctx);
   HostSession* s = c->session;
   s->thread_.invoke([s, id = c->id, cand = std::string(candidate), mline] {
-    s->signaling_.send(json::Message()
+    s->channel_.send(json::Message()
                            .set("type", "ice")
                            .set("to", id)
                            .set("candidate", cand)
@@ -263,7 +253,20 @@ void HostSession::on_ice_state(GstElement* webrtc, GParamSpec*, gpointer ctx) {
                                                                              : nullptr;
   if (!text) return;
   HostSession* s = c->session;
-  s->thread_.invoke([s, msg = "Espectador " + c->id + ": " + text] { s->log(msg); });
+  bool connected = state == GST_WEBRTC_ICE_CONNECTION_STATE_CONNECTED;
+  s->thread_.invoke([s, id = c->id, connected, msg = "Espectador " + c->id + ": " + text] {
+    s->log(msg);
+    // The keyframe requested on join went out before media could flow; ask again.
+    auto it = s->peers_.find(id);
+    if (connected && it != s->peers_.end()) request_keyframe(it->second.elements[0]);
+  });
+}
+
+void HostSession::request_keyframe(GstElement* video_queue) {
+  GstPad* sink = gst_element_get_static_pad(video_queue, "sink");
+  gst_pad_push_event(sink,
+                     gst_video_event_new_upstream_force_key_unit(GST_CLOCK_TIME_NONE, TRUE, 0));
+  gst_object_unref(sink);
 }
 
 }  // namespace streamline

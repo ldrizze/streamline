@@ -32,6 +32,8 @@ bool setup_gst_environment() {
 
   set_env(L"GST_PLUGIN_SYSTEM_PATH_1_0", plugins);
   set_env(L"GST_PLUGIN_PATH_1_0", {});
+  // Bundled TLS backend for wss:// (signaling brokers).
+  set_env(L"GIO_MODULE_DIR", exe_dir().parent_path() / "lib" / "gio" / "modules");
   // Scan in-process: no gst-plugin-scanner.exe to ship, and we only bundle known plugins.
   SetEnvironmentVariableW(L"GST_REGISTRY_FORK", L"no");
 

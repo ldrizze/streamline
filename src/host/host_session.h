@@ -3,18 +3,19 @@
 #include <functional>
 #include <map>
 #include <string>
+#include <vector>
 
 #include <gst/gst.h>
 
 #include "common/glib_thread.h"
-#include "common/signaling.h"
+#include "common/room_channel.h"
 
 namespace streamline {
 
 class HostPipeline;
 
-// Joins a signaling room as host and serves each viewer with its own webrtcbin
-// fed from the HostPipeline's tees (sendonly; the host makes the offer).
+// Opens an encrypted signaling room (RoomChannel) as host and serves each viewer
+// with its own webrtcbin fed from the HostPipeline's tees (sendonly; the host offers).
 class HostSession {
  public:
   struct Callbacks {
@@ -25,8 +26,8 @@ class HostSession {
   ~HostSession() { stop(); }
 
   // `pipeline` must be running and outlive this session's stop().
-  void start(HostPipeline& pipeline, const std::string& url, const std::string& room,
-             Callbacks callbacks);
+  void start(HostPipeline& pipeline, const std::string& room,
+             const std::vector<std::string>& brokers, Callbacks callbacks);
   // Call before stopping the HostPipeline.
   void stop();
 
@@ -44,6 +45,8 @@ class HostSession {
   void on_answer(const std::string& id, const std::string& sdp);
   void on_remote_ice(const std::string& id, const std::string& candidate, int mline);
   static void disconnect_handlers(GstElement* webrtc);
+  // Upstream force-key-unit from a viewer's video queue (the encoder is shared).
+  static void request_keyframe(GstElement* video_queue);
 
   // Called from GStreamer threads; hop onto the session thread with the peer id.
   static void on_negotiation_needed(GstElement* webrtc, gpointer ctx);
@@ -57,9 +60,8 @@ class HostSession {
 
   HostPipeline* pipeline_ = nullptr;
   GlibThread thread_;
-  SignalingClient signaling_;
+  RoomChannel channel_;
   Callbacks callbacks_;
-  std::string room_;
   std::map<std::string, Peer> peers_;  // touched only on thread_
 };
 

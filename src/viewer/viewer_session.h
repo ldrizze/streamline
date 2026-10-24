@@ -7,14 +7,17 @@
 
 #include <gst/gst.h>
 
+#include <vector>
+
 #include "common/glib_thread.h"
 #include "common/gst_util.h"
-#include "common/signaling.h"
+#include "common/room_channel.h"
 
 namespace streamline {
 
-// Joins a room as viewer, answers the host's offer and renders what arrives:
-// video into `video_window` (D3D11), audio to the default output device.
+// Joins an encrypted signaling room (RoomChannel) as viewer, answers the host's
+// offer and renders what arrives: video into `video_window` (D3D11), audio to the
+// default output device.
 class ViewerSession {
  public:
   struct Callbacks {
@@ -28,8 +31,8 @@ class ViewerSession {
 
   ~ViewerSession() { stop(); }
 
-  bool start(const std::string& url, const std::string& room, HWND video_window,
-             Callbacks callbacks, std::string& error);
+  bool start(const std::string& room, const std::vector<std::string>& brokers,
+             HWND video_window, Callbacks callbacks, std::string& error);
   void stop();
   bool running() const { return pipeline_ != nullptr; }
 
@@ -39,6 +42,9 @@ class ViewerSession {
  private:
   void on_signal(const json::Message& m);
   void on_offer(const std::string& from, const std::string& sdp);
+  void send_join();
+  void stop_join_timer();
+  void add_remote_ice(const std::string& candidate, guint mline);
 
   static void on_pad_added(GstElement* webrtc, GstPad* pad, gpointer self);
   static void on_ice_candidate(GstElement* webrtc, guint mline, gchar* candidate, gpointer self);
@@ -50,13 +56,19 @@ class ViewerSession {
   }
 
   GlibThread thread_;
-  SignalingClient signaling_;
+  RoomChannel channel_;
   Callbacks callbacks_;
   GstElement* pipeline_ = nullptr;
   GstElement* webrtc_ = nullptr;
   HWND video_window_ = nullptr;
-  std::string room_;
-  std::string host_id_;  // session thread only
+  GSource* join_timer_ = nullptr;  // session thread only
+  std::string host_id_;            // session thread only
+  struct PendingIce {
+    std::string from;
+    std::string candidate;
+    guint mline;
+  };
+  std::vector<PendingIce> pending_ice_;  // ICE that arrived before the offer
   FlowMeter meter_;
   double audio_db_ = -100;
 };
