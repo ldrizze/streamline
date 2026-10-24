@@ -9,7 +9,7 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ### Adicionado
 - Ícone próprio do aplicativo (ondas de transmissão), exibido no executável, na
-  barra de título e na barra de tarefas.
+  barra de título, na barra de tarefas e no instalador.
 
 ## [0.1.0] - 2026-10-24
 

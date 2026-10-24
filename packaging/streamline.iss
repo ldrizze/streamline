@@ -33,6 +33,7 @@ OutputBaseFilename=Streamline-Setup-{#AppVersion}
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\resources\icon\streamline.ico
 UninstallDisplayIcon={app}\bin\streamline.exe
 CloseApplications=yes
 
