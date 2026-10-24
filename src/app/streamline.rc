@@ -1,0 +1,3 @@
+// wx.rc embeds the Common Controls v6 manifest (and DPI awareness) wxMSW requires.
+#define wxUSE_DPI_AWARE_MANIFEST 2
+#include "wx/msw/wx.rc"
