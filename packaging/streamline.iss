@@ -3,11 +3,11 @@
 ;   ISCC /DAppVersion=1.2.3 packaging\streamline.iss  ->  build\installer\Streamline-Setup-1.2.3.exe
 
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.3.1"
 #endif
-; Numeric x.y.z for the file version resource (AppVersion may be "0.3.0-ci.12").
+; Numeric x.y.z for the file version resource (AppVersion may be "0.3.1-ci.12").
 #ifndef NumericVersion
-  #define NumericVersion "0.3.0"
+  #define NumericVersion "0.3.1"
 #endif
 #define DistDir "..\dist"
 
@@ -36,6 +36,9 @@ WizardStyle=modern
 SetupIconFile=..\resources\icon\streamline.ico
 UninstallDisplayIcon={app}\bin\streamline.exe
 CloseApplications=yes
+; Tells Explorer to refresh its icon cache: upgrades keep the same exe path, so
+; shortcuts would otherwise keep showing the previous version's icon.
+ChangesAssociations=yes
 
 [Languages]
 Name: "ptbr"; MessagesFile: "compiler:Languages\BrazilianPortuguese.isl"

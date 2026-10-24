@@ -7,6 +7,15 @@ sinalização e o comportamento podem mudar entre versões menores.
 
 ## [Não lançado]
 
+## [0.3.1] - 2026-10-24
+
+Compatível com a 0.2.0 e a 0.3.0 (mesmo protocolo de sinalização).
+
+### Corrigido
+- Ao atualizar uma instalação antiga, os atalhos da área de trabalho e do menu
+  Iniciar continuavam mostrando o ícone padrão do wxWidgets (cache de ícones do
+  Explorer). O instalador agora pede ao Explorer que recarregue os ícones.
+
 ## [0.3.0] - 2026-10-24
 
 Compatível com a 0.2.0 (mesmo protocolo de sinalização).
@@ -96,7 +105,8 @@ Primeira versão de desenvolvimento.
 - Executáveis não assinados: o SmartScreen avisa na primeira execução.
 - Requer Windows 10 2004 (build 19041) ou mais novo, 64 bits.
 
-[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.3.0...HEAD
+[Não lançado]: https://github.com/ldrizze/streamline/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/ldrizze/streamline/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/ldrizze/streamline/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ldrizze/streamline/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ldrizze/streamline/releases/tag/v0.1.0
