@@ -44,9 +44,19 @@ jobs:
         id: version
         run: |
           base=$(sed -n 's/^project(streamline VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then v="${GITHUB_REF_NAME#v}"; else v="$base-ci.$GITHUB_RUN_NUMBER"; fi
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            v="${GITHUB_REF_NAME#v}"
+            # Release tags must match project(VERSION) (a -rc.N style suffix is allowed).
+            if [[ "${v%%-*}" != "$base" ]]; then
+              echo "::error::tag $GITHUB_REF_NAME does not match CMakeLists.txt version $base"
+              exit 1
+            fi
+          else
+            v="$base-ci.$GITHUB_RUN_NUMBER"
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "numeric=${v%%-*}" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$([[ "$v" == *-* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "Streamline $v"
 
       - name: Build and package dist/
@@ -80,9 +90,23 @@ jobs:
           name: streamline-${{ steps.version.outputs.version }}-win64
           path: build/installer/*
 
+      - name: Release notes from CHANGELOG.md
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          v="${{ steps.version.outputs.numeric }}"
+          awk -v hdr="## [$v]" 'index($0, hdr) == 1 {f=1; next} /^## \[/ {f=0} /^\[.*\]: http/ {f=0} f' \
+            CHANGELOG.md > build/release-notes.md
+          if [[ ! -s build/release-notes.md ]]; then
+            echo "::error::CHANGELOG.md has no section for [$v]"
+            exit 1
+          fi
+          cat build/release-notes.md
+
       - name: GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
         with:
+          name: Streamline ${{ steps.version.outputs.version }}
+          body_path: build/release-notes.md
+          prerelease: ${{ steps.version.outputs.prerelease }}
           files: build/installer/*
-          generate_release_notes: true
